@@ -14,7 +14,7 @@ void init_Approach(nanobind::module_& m);
 
 static const std::unordered_map<std::string, Approach> approach_map {
     { "curb", Approach::CURB },
-//    { std::string(), Approach::CURB },
+    { "opposite", Approach::OPPOSITE },
     { "unrestricted", Approach::UNRESTRICTED }
 };
 
