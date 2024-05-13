@@ -85,7 +85,7 @@ void init_TripParameters(nb::module_& m) {
             },
                 "source"_a = std::string(),
                 "destination"_a = std::string(),
-                "roundtrip"_a = true,
+                "roundtrip"_a = false,
                     "steps"_a = false,
                     "alternatives"_a = 0,
                     "annotations"_a = std::vector<std::string>(),
