@@ -94,6 +94,7 @@ else()
     libosrm
     GIT_REPOSITORY https://github.com/Project-OSRM/osrm-backend
     GIT_TAG master
+    GIT_SUBMODULES ""
   )
   SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-array-bounds -Wno-uninitialized -Wno-free-nonheap-object")
 
