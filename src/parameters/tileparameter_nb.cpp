@@ -15,8 +15,8 @@ void init_TileParameters(nb::module_& m) {
     using osrm::engine::api::TileParameters;
 
     nb::class_<TileParameters>(m, "TileParameters", nb::is_final())
-        .def(nb::init<>(), nb::raw_doc("Instantiates an instance of TileParameters.\n\n"
-            "Examples:\n\
+    .def(nb::init<>(), "Instantiates an instance of TileParameters.\n\n"
+                "Examples:\n\
                 >>> tile_params = osrm.TileParameters([17059, 11948, 15])\n\
                 >>> tile_params = osrm.TileParameters(\n\
                         x = 17059,\n\
@@ -37,18 +37,43 @@ void init_TileParameters(nb::module_& m) {
                 x (int): x value.\n\
                 y (int): y value.\n\
                 z (int): z value."
-            ))
-        .def(nb::init<unsigned int, unsigned int, unsigned int>())
-        .def("__init__", [](TileParameters* t, const std::vector<unsigned int>& coord) {
-            if(coord.size() != 3) {
-                throw std::runtime_error("Parameter must be an array [x, y, z]");
+            )
+        .def("__init__", [](TileParameters* t, nb::args args, const nb::kwargs& kwargs){
+            unsigned int x = 0, y = 0, z = 0; bool set_any=false;
+            // Positional compatibility:
+            if(args.size()==1) {
+                nb::handle seq = args[0];
+                if(nb::isinstance<nb::sequence>(seq)) {
+                    std::vector<unsigned int> vals; for(nb::handle h: nb::iter(seq)) vals.push_back(nb::cast<unsigned int>(h));
+                    if(vals.size()!=3) throw std::runtime_error("Tile list/tuple must have length 3");
+                    x=vals[0]; y=vals[1]; z=vals[2]; set_any=true;
+                }
+            } else if(args.size()==3) {
+                x = nb::cast<unsigned int>(args[0]); y = nb::cast<unsigned int>(args[1]); z = nb::cast<unsigned int>(args[2]); set_any=true;
+            } else if(args.size()!=0) {
+                throw std::runtime_error("TileParameters expects either (x,y,z) or ([x,y,z]) or keyword args");
             }
-            
-            new (t) TileParameters{coord[0], coord[1], coord[2]};
-         })
+            if(kwargs){
+                for(auto item: kwargs){
+                    std::string key = nb::cast<std::string>(item.first);
+                    if(key=="x") { x = nb::cast<unsigned int>(item.second); set_any=true; }
+                    else if(key=="y") { y = nb::cast<unsigned int>(item.second); set_any=true; }
+                    else if(key=="z") { z = nb::cast<unsigned int>(item.second); set_any=true; }
+                    else if(key=="tile" || key=="xyz") {
+                        std::vector<unsigned int> vals; for(nb::handle h: nb::iter(item.second)) vals.push_back(nb::cast<unsigned int>(h));
+                        if(vals.size()!=3) throw std::runtime_error("Tile list/tuple must have length 3");
+                        x=vals[0]; y=vals[1]; z=vals[2]; set_any=true;
+                    } else {
+                        throw std::invalid_argument("Unknown TileParameters argument: "+key);
+                    }
+                }
+            }
+            if(!set_any) throw std::runtime_error("TileParameters requires x,y,z or tile=[x,y,z]");
+            new (t) TileParameters{x,y,z};
+        })
         .def_rw("x", &TileParameters::x)
         .def_rw("y", &TileParameters::y)
         .def_rw("z", &TileParameters::z)
         .def("IsValid", &TileParameters::IsValid);
-    nb::implicitly_convertible<std::vector<unsigned int>, TileParameters>();
+    // Removed implicit conversion; kwargs/tile list used instead.
 }

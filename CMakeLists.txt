@@ -93,7 +93,7 @@ else()
   FetchContent_Declare(
     libosrm
     GIT_REPOSITORY https://github.com/Project-OSRM/osrm-backend
-    GIT_TAG d4dc297f75b574f0236eb8ea08670082d2493719 # 6905 May 27
+    GIT_TAG v6.0.0 #d4dc297f75b574f0236eb8ea08670082d2493719 # 6905 May 27
     GIT_SUBMODULES ""
   )
   SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-array-bounds -Wno-uninitialized -Wno-free-nonheap-object")
