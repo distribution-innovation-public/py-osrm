@@ -101,6 +101,38 @@ else()
   FetchContent_GetProperties(libosrm)
   if(NOT libosrm_POPULATED)
     FetchContent_Populate(libosrm)
+
+    # Optional: force a clean rebuild of OSRM backend (set OSRM_FORCE_REBUILD=1)
+    if(DEFINED ENV{OSRM_FORCE_REBUILD} AND EXISTS ${libosrm_BINARY_DIR})
+      message(WARNING "OSRM_FORCE_REBUILD set - removing existing libosrm binary directory: ${libosrm_BINARY_DIR}")
+      file(REMOVE_RECURSE ${libosrm_BINARY_DIR})
+      file(MAKE_DIRECTORY ${libosrm_BINARY_DIR})
+    endif()
+
+    # If a stale libosrm.a from another architecture was cached (e.g. x86_64 reused on aarch64),
+    # detect mismatch via 'file' output and remove it so the sub-build will regenerate it.
+    function(osrm_check_static_lib_arch LIB EXPECTED_TAG)
+      if(EXISTS "${LIB}")
+        find_program(OSRM_FILE_CMD file)
+        if(OSRM_FILE_CMD)
+          execute_process(COMMAND ${OSRM_FILE_CMD} -b ${LIB} OUTPUT_VARIABLE _FILE_OUT OUTPUT_STRIP_TRAILING_WHITESPACE)
+          string(TOLOWER "${_FILE_OUT}" _FILE_OUT_L)
+          string(TOLOWER "${EXPECTED_TAG}" _EXP_L)
+          if(NOT _FILE_OUT_L MATCHES "${_EXP_L}")
+            message(WARNING "Architecture mismatch for ${LIB}: expected contains '${EXPECTED_TAG}', file says '${_FILE_OUT}'. Removing to force rebuild.")
+            file(REMOVE "${LIB}")
+          endif()
+        endif()
+      endif()
+    endfunction()
+    # Map common processor names
+    set(_OSRM_EXPECTED_ARCH "${CMAKE_SYSTEM_PROCESSOR}")
+    if(_OSRM_EXPECTED_ARCH MATCHES "arm64")
+      set(_OSRM_EXPECTED_ARCH "aarch64")
+    endif()
+    # Pre-existing lib path (before add_subdirectory it generally won't exist yet, but in incremental builds it may)
+    osrm_check_static_lib_arch("${libosrm_BINARY_DIR}/libosrm.a" "${_OSRM_EXPECTED_ARCH}")
+
     set(CMAKE_INSTALL_PREFIX ${CMAKE_CURRENT_BINARY_DIR})
     add_subdirectory(
       ${libosrm_SOURCE_DIR}

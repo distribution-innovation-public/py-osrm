@@ -36,7 +36,6 @@ test-command = [
 ]
 
 [tool.cibuildwheel.linux]
-environment = "LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/local/lib/intel64/gcc4.8/"
 repair-wheel-command = "auditwheel repair -w {dest_dir} {wheel}"
 
 [tool.cibuildwheel.macos]
