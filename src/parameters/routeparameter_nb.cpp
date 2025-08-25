@@ -2,11 +2,15 @@
 
 #include "engine/api/route_parameters.hpp"
 #include "utility/param_utility.h"
+#include "parameters/parse_helpers.h"
 
 #include <nanobind/nanobind.h>
 #include <nanobind/operators.h>
 #include <nanobind/stl/string.h>
 #include <nanobind/stl/vector.h>
+#include <algorithm>
+#include <vector>
+
 
 namespace nb = nanobind;
 using namespace nb::literals;
@@ -16,7 +20,7 @@ void init_RouteParameters(nb::module_& m) {
     using osrm::engine::api::RouteParameters;
 
     nb::class_<RouteParameters, BaseParameters>(m, "RouteParameters")
-        .def(nb::init<>(), nb::raw_doc("Instantiates an instance of RouteParameters.\n\n"
+    .def(nb::init<>(), "Instantiates an instance of RouteParameters.\n\n"
             "Examples:\n\
                 >>> route_params = osrm.RouteParameters(\n\
                         coordinates = [(7.41337, 43.72956), (7.41546, 43.73077)],\n\
@@ -58,61 +62,114 @@ void init_RouteParameters(nb::module_& m) {
                 overview (string): Add overview geometry either full, simplified.\n\
                 continue_straight (bool): Forces the route to keep going straight at waypoints, constraining u-turns.\n\
                 BaseParameters (osrm.osrm_ext.BaseParameters): Attributes from parent class."
-            ))
-        .def("__init__", [](RouteParameters* t,
-                const bool steps,
-                int number_of_alternatives,
-                const std::vector<RouteParameters::AnnotationsType>& annotations,
-                RouteParameters::GeometriesType geometries,
-                RouteParameters::OverviewType overview,
-                const boost::optional<bool> continue_straight,
-                std::vector<std::size_t> waypoints,
-                    std::vector<osrm::util::Coordinate> coordinates,
-                    std::vector<boost::optional<osrm::engine::Hint>> hints,
-                    std::vector<boost::optional<double>> radiuses,
-                    std::vector<boost::optional<osrm::engine::Bearing>> bearings,
-                    const std::vector<boost::optional<osrm::engine::Approach>>& approaches,
-                    bool generate_hints,
-                    std::vector<std::string> exclude,
-                    const BaseParameters::SnappingType snapping
-            ) {
-                new (t) RouteParameters();
-
-                osrm_nb_util::assign_routeparameters(t,
-                                                     steps,
-                                                     number_of_alternatives,
-                                                     annotations,
-                                                     geometries,
-                                                     overview,
-                                                     continue_straight,
-                                                     waypoints);
-
-                osrm_nb_util::assign_baseparameters(t,
-                                                    coordinates,
-                                                    hints,
-                                                    radiuses,
-                                                    bearings,
-                                                    approaches,
-                                                    generate_hints,
-                                                    exclude,
-                                                    snapping);
-            },
-                "steps"_a = false,
-                "number_of_alternatives"_a = 0,
-                "annotations"_a = std::vector<std::string>(),
-                "geometries"_a = std::string(),
-                "overview"_a = std::string(),
-                "continue_straight"_a = boost::optional<bool>(),
-                "waypoints"_a = std::vector<std::size_t>(),
-                    "coordinates"_a = std::vector<osrm::util::Coordinate>(),
-                    "hints"_a = std::vector<boost::optional<osrm::engine::Hint>>(),
-                    "radiuses"_a = std::vector<boost::optional<double>>(),
-                    "bearings"_a = std::vector<boost::optional<osrm::engine::Bearing>>(),
-                    "approaches"_a = std::vector<std::string*>(),
-                    "generate_hints"_a = true,
-                    "exclude"_a = std::vector<std::string>(),
-                    "snapping"_a = std::string()
             )
+    .def("__init__", [](RouteParameters* t, const nb::kwargs& kwargs) {
+        new (t) RouteParameters();
+
+        // Defaults
+        bool steps = false;
+        int number_of_alternatives = 0;
+        std::vector<RouteParameters::AnnotationsType> ann_enums;
+        RouteParameters::GeometriesType geometries = RouteParameters::GeometriesType::Polyline; // default empty previously
+        RouteParameters::OverviewType overview = RouteParameters::OverviewType::Simplified; // mimic previous default ""
+        std::optional<bool> continue_straight;
+        std::vector<std::size_t> waypoints;
+        std::vector<osrm::util::Coordinate> coordinates;
+        std::vector<std::optional<osrm::engine::Hint>> hints;
+        std::vector<std::optional<double>> radiuses;
+        std::vector<std::optional<osrm::engine::Bearing>> bearings;
+        std::vector<std::optional<osrm::engine::Approach>> approaches;
+        bool generate_hints = true;
+        std::vector<std::string> exclude;
+        BaseParameters::SnappingType snapping = BaseParameters::SnappingType::Default;
+
+    using namespace osrm_nb_parse;
+
+        for (auto item : kwargs) {
+            std::string key = nb::cast<std::string>(item.first);
+            if(key=="steps") steps = nb::cast<bool>(item.second);
+            else if(key=="number_of_alternatives") number_of_alternatives = nb::cast<int>(item.second);
+            else if(key=="annotations") {
+                ann_enums.clear();
+                for(nb::handle h : nb::iter(item.second)) {
+                    if(nb::isinstance<nb::str>(h)) ann_enums.push_back(parse_route_annotation(nb::cast<std::string>(h)));
+                    else ann_enums.push_back(nb::cast<RouteParameters::AnnotationsType>(h));
+                }
+            }
+            else if(key=="geometries") {
+                if(nb::isinstance<nb::str>(item.second)) geometries = parse_geometries(nb::cast<std::string>(item.second));
+                else geometries = nb::cast<RouteParameters::GeometriesType>(item.second);
+            }
+            else if(key=="overview") {
+                if(nb::isinstance<nb::str>(item.second)) overview = parse_overview(nb::cast<std::string>(item.second));
+                else overview = nb::cast<RouteParameters::OverviewType>(item.second);
+            }
+            else if(key=="continue_straight") {
+                if(item.second.is_none()) continue_straight.reset(); else continue_straight = nb::cast<bool>(item.second);
+            }
+            else if(key=="waypoints") {
+                for(nb::handle h : nb::iter(item.second)) waypoints.push_back(nb::cast<std::size_t>(h));
+            }
+            else if(key=="coordinates") {
+                for(nb::handle h : nb::iter(item.second)) {
+                    if(nb::isinstance<nb::tuple>(h)) {
+                        auto tup = nb::tuple(h);
+                        if(tup.size()!=2) throw std::runtime_error("Coordinate tuple must have length 2");
+                        double lon = nb::cast<double>(tup[0]);
+                        double lat = nb::cast<double>(tup[1]);
+                        coordinates.emplace_back(osrm::util::FloatLongitude{lon}, osrm::util::FloatLatitude{lat});
+                    } else {
+                        coordinates.push_back(nb::cast<osrm::util::Coordinate>(h));
+                    }
+                }
+            }
+            else if(key=="exclude") {
+                for(nb::handle h : nb::iter(item.second)) exclude.push_back(nb::cast<std::string>(h));
+            }
+            else if(key=="generate_hints") generate_hints = nb::cast<bool>(item.second);
+            else if(key=="snapping") {
+                if(nb::isinstance<nb::str>(item.second)) snapping = parse_snapping(nb::cast<std::string>(item.second));
+                else snapping = nb::cast<BaseParameters::SnappingType>(item.second);
+            }
+            // Other lists (hints, radiuses, bearings, approaches) kept simple: only accept already-typed values for now
+            else if(key=="hints") {
+                for(nb::handle h : nb::iter(item.second)) hints.push_back(nb::cast<std::optional<osrm::engine::Hint>>(h));
+            }
+            else if(key=="radiuses") {
+                for(nb::handle h : nb::iter(item.second)) {
+                    if(h.is_none()) radiuses.push_back(std::optional<double>()); else radiuses.push_back(nb::cast<double>(h));
+                }
+            }
+            else if(key=="bearings") {
+                for(nb::handle h : nb::iter(item.second)) bearings.push_back(nb::cast<std::optional<osrm::engine::Bearing>>(h));
+            }
+            else if(key=="approaches") {
+                for(nb::handle h : nb::iter(item.second)) approaches.push_back(nb::cast<std::optional<osrm::engine::Approach>>(h));
+            }
+            else {
+                throw std::invalid_argument("Unknown RouteParameters argument: " + key);
+            }
+        }
+
+        osrm_nb_util::assign_routeparameters(t,
+                                             steps,
+                                             number_of_alternatives,
+                                             ann_enums,
+                                             geometries,
+                                             overview,
+                                             continue_straight,
+                                             waypoints);
+
+        osrm_nb_util::assign_baseparameters(t,
+                                            std::move(coordinates),
+                                            std::move(hints),
+                                            std::move(radiuses),
+                                            std::move(bearings),
+                                            approaches,
+                                            generate_hints,
+                                            std::move(exclude),
+                                            snapping);
+    })
         .def_rw("steps", &RouteParameters::steps)
         .def_rw("alternatives", &RouteParameters::alternatives)
         .def_rw("number_of_alternatives", &RouteParameters::number_of_alternatives)
@@ -122,42 +179,24 @@ void init_RouteParameters(nb::module_& m) {
         .def_rw("continue_straight", &RouteParameters::continue_straight)
         .def("IsValid", &RouteParameters::IsValid);
 
-    nb::class_<RouteParameters::GeometriesType>(m, "RouteGeometriesType")
-        .def("__init__", [](RouteParameters::GeometriesType* t, const std::string& str) {
-            RouteParameters::GeometriesType geometries = osrm_nb_util::str_to_enum(str, "RouteGeometriesType", geometries_map);
-            new (t) RouteParameters::GeometriesType(geometries);
-        }, "Instantiates a GeometriesType based on provided String value.")
-        .def("__repr__", [](RouteParameters::GeometriesType type) {
-            return osrm_nb_util::enum_to_str(type, "RouteGeometriesType", geometries_map);
-        }, "Return a String based on GeometriesType value.");
-    nb::implicitly_convertible<std::string, RouteParameters::GeometriesType>();
+    // Enums: expose directly; Python can still use strings via helper constructors if needed later.
+    nb::enum_<RouteParameters::GeometriesType>(m, "RouteGeometriesType")
+        .value("Polyline", RouteParameters::GeometriesType::Polyline)
+        .value("Polyline6", RouteParameters::GeometriesType::Polyline6)
+        .value("GeoJSON", RouteParameters::GeometriesType::GeoJSON);
 
-    nb::class_<RouteParameters::OverviewType>(m, "RouteOverviewType")
-        .def("__init__", [](RouteParameters::OverviewType* t, const std::string& str) {
-            RouteParameters::OverviewType overview = osrm_nb_util::str_to_enum(str, "RouteOverviewType", overview_map);
-            new (t) RouteParameters::OverviewType(overview);
-        }, "Instantiates a OverviewType based on provided String value.")
-        .def("__repr__", [](RouteParameters::OverviewType type) {
-            return osrm_nb_util::enum_to_str(type, "RouteOverviewType", overview_map);
-        }, "Return a String based on OverviewType value.");
-    nb::implicitly_convertible<std::string, RouteParameters::OverviewType>();
+    nb::enum_<RouteParameters::OverviewType>(m, "RouteOverviewType")
+        .value("Simplified", RouteParameters::OverviewType::Simplified)
+        .value("Full", RouteParameters::OverviewType::Full)
+        .value("False", RouteParameters::OverviewType::False);
 
-    nb::class_<RouteParameters::AnnotationsType>(m, "RouteAnnotationsType")
-        .def("__init__", [](RouteParameters::AnnotationsType* t, const std::string& str) {
-            RouteParameters::AnnotationsType annotation = osrm_nb_util::str_to_enum(str, "RouteAnnotationsType", route_annotations_map);
-            new (t) RouteParameters::AnnotationsType(annotation);
-        }, "Instantiates a AnnotationsType based on provided String value.")
-        .def("__repr__", [](RouteParameters::AnnotationsType type) {
-            return std::to_string((int)type);
-        }, "Return a String based on AnnotationsType value.")
-        .def("__and__", [](RouteParameters::AnnotationsType lhs, RouteParameters::AnnotationsType rhs) {
-            return lhs & rhs;
-        }, nb::is_operator(), "Return the bitwise AND result of two AnnotationsTypes.")
-        .def("__or__", [](RouteParameters::AnnotationsType lhs, RouteParameters::AnnotationsType rhs) {
-            return lhs | rhs;
-        }, nb::is_operator(), "Return the bitwise OR result of two AnnotationsTypes.")
-        .def("__ior__", [](RouteParameters::AnnotationsType& lhs, RouteParameters::AnnotationsType rhs) {
-            return lhs = lhs | rhs;
-        }, nb::is_operator(), "Add the bitwise OR value of another AnnotationsType.");
-    nb::implicitly_convertible<std::string, RouteParameters::AnnotationsType>();
+    nb::enum_<RouteParameters::AnnotationsType>(m, "RouteAnnotationsType")
+        .value("None", RouteParameters::AnnotationsType::None)
+        .value("Duration", RouteParameters::AnnotationsType::Duration)
+        .value("Nodes", RouteParameters::AnnotationsType::Nodes)
+        .value("Distance", RouteParameters::AnnotationsType::Distance)
+        .value("Weight", RouteParameters::AnnotationsType::Weight)
+        .value("Datasources", RouteParameters::AnnotationsType::Datasources)
+        .value("Speed", RouteParameters::AnnotationsType::Speed)
+        .value("All", RouteParameters::AnnotationsType::All);
 }

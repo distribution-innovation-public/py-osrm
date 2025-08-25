@@ -26,7 +26,18 @@ if (NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
   set_property(CACHE CMAKE_BUILD_TYPE PROPERTY STRINGS "Debug" "Release" "MinSizeRel" "RelWithDebInfo")
 endif()
 
-find_package(Python 3.8
+# Prefer lld when using Clang on Linux for faster and more reliable linking (can override with OSRM_DISABLE_LLD=1)
+if(CMAKE_CXX_COMPILER_ID MATCHES "Clang" AND CMAKE_SYSTEM_NAME STREQUAL "Linux" AND NOT DEFINED ENV{OSRM_DISABLE_LLD})
+  # -fuse-ld=lld lets the driver pick up ld.lld; no need for path. We append to all linker flag sets.
+  set(_LLD_FLAG "-fuse-ld=lld")
+  add_link_options(${_LLD_FLAG})
+  set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} ${_LLD_FLAG}" CACHE STRING "" FORCE)
+  set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} ${_LLD_FLAG}" CACHE STRING "" FORCE)
+  set(CMAKE_MODULE_LINKER_FLAGS "${CMAKE_MODULE_LINKER_FLAGS} ${_LLD_FLAG}" CACHE STRING "" FORCE)
+  message(STATUS "Using lld linker (set OSRM_DISABLE_LLD=1 to disable).")
+endif()
+
+find_package(Python 3.13
   REQUIRED COMPONENTS Interpreter Development.Module
   OPTIONAL_COMPONENTS Development.SABIModule
 )
@@ -93,7 +104,7 @@ else()
   FetchContent_Declare(
     libosrm
     GIT_REPOSITORY https://github.com/Project-OSRM/osrm-backend
-    GIT_TAG d4dc297f75b574f0236eb8ea08670082d2493719 # 6905 May 27
+    GIT_TAG v6.0.0 #d4dc297f75b574f0236eb8ea08670082d2493719 # 6905 May 27
     GIT_SUBMODULES ""
   )
   SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-array-bounds -Wno-uninitialized -Wno-free-nonheap-object")
@@ -101,6 +112,38 @@ else()
   FetchContent_GetProperties(libosrm)
   if(NOT libosrm_POPULATED)
     FetchContent_Populate(libosrm)
+
+    # Optional: force a clean rebuild of OSRM backend (set OSRM_FORCE_REBUILD=1)
+    if(DEFINED ENV{OSRM_FORCE_REBUILD} AND EXISTS ${libosrm_BINARY_DIR})
+      message(WARNING "OSRM_FORCE_REBUILD set - removing existing libosrm binary directory: ${libosrm_BINARY_DIR}")
+      file(REMOVE_RECURSE ${libosrm_BINARY_DIR})
+      file(MAKE_DIRECTORY ${libosrm_BINARY_DIR})
+    endif()
+
+    # If a stale libosrm.a from another architecture was cached (e.g. x86_64 reused on aarch64),
+    # detect mismatch via 'file' output and remove it so the sub-build will regenerate it.
+    function(osrm_check_static_lib_arch LIB EXPECTED_TAG)
+      if(EXISTS "${LIB}")
+        find_program(OSRM_FILE_CMD file)
+        if(OSRM_FILE_CMD)
+          execute_process(COMMAND ${OSRM_FILE_CMD} -b ${LIB} OUTPUT_VARIABLE _FILE_OUT OUTPUT_STRIP_TRAILING_WHITESPACE)
+          string(TOLOWER "${_FILE_OUT}" _FILE_OUT_L)
+          string(TOLOWER "${EXPECTED_TAG}" _EXP_L)
+          if(NOT _FILE_OUT_L MATCHES "${_EXP_L}")
+            message(WARNING "Architecture mismatch for ${LIB}: expected contains '${EXPECTED_TAG}', file says '${_FILE_OUT}'. Removing to force rebuild.")
+            file(REMOVE "${LIB}")
+          endif()
+        endif()
+      endif()
+    endfunction()
+    # Map common processor names
+    set(_OSRM_EXPECTED_ARCH "${CMAKE_SYSTEM_PROCESSOR}")
+    if(_OSRM_EXPECTED_ARCH MATCHES "arm64")
+      set(_OSRM_EXPECTED_ARCH "aarch64")
+    endif()
+    # Pre-existing lib path (before add_subdirectory it generally won't exist yet, but in incremental builds it may)
+    osrm_check_static_lib_arch("${libosrm_BINARY_DIR}/libosrm.a" "${_OSRM_EXPECTED_ARCH}")
+
     set(CMAKE_INSTALL_PREFIX ${CMAKE_CURRENT_BINARY_DIR})
     add_subdirectory(
       ${libosrm_SOURCE_DIR}
