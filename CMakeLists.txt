@@ -26,6 +26,17 @@ if (NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
   set_property(CACHE CMAKE_BUILD_TYPE PROPERTY STRINGS "Debug" "Release" "MinSizeRel" "RelWithDebInfo")
 endif()
 
+# Prefer lld when using Clang on Linux for faster and more reliable linking (can override with OSRM_DISABLE_LLD=1)
+if(CMAKE_CXX_COMPILER_ID MATCHES "Clang" AND CMAKE_SYSTEM_NAME STREQUAL "Linux" AND NOT DEFINED ENV{OSRM_DISABLE_LLD})
+  # -fuse-ld=lld lets the driver pick up ld.lld; no need for path. We append to all linker flag sets.
+  set(_LLD_FLAG "-fuse-ld=lld")
+  add_link_options(${_LLD_FLAG})
+  set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} ${_LLD_FLAG}" CACHE STRING "" FORCE)
+  set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} ${_LLD_FLAG}" CACHE STRING "" FORCE)
+  set(CMAKE_MODULE_LINKER_FLAGS "${CMAKE_MODULE_LINKER_FLAGS} ${_LLD_FLAG}" CACHE STRING "" FORCE)
+  message(STATUS "Using lld linker (set OSRM_DISABLE_LLD=1 to disable).")
+endif()
+
 find_package(Python 3.13
   REQUIRED COMPONENTS Interpreter Development.Module
   OPTIONAL_COMPONENTS Development.SABIModule
