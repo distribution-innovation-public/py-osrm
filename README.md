@@ -14,7 +14,7 @@ Windows | x86_64
 ---
 
 ## Installation
-py-osrm is supported on **CPython 3.8+**, and can be installed from source via running the following command in the source folder:
+py-osrm currently targets **CPython 3.13** (wheels/builds are limited to 3.13) and can be installed from source via running the following command in the source folder:
 ```
 pip install .
 ```
