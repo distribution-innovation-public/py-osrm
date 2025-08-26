@@ -111,8 +111,7 @@ NB_MODULE(osrm_ext, m) {
             json::Object result;
             osrm::engine::Status status = t->Match(params, result);
             osrm_nb_util::check_status(status, result);
-
-            return result;
+            return json_object_to_py(result);
     }, "Matches/snaps given GPS points to the road network in the most plausible way.\n\n"
             "Examples:\n\
                 >>> res = py_osrm.Match(match_params)\n\n"
@@ -131,8 +130,7 @@ NB_MODULE(osrm_ext, m) {
             json::Object result;
             osrm::engine::Status status = t->Nearest(params, result);
             osrm_nb_util::check_status(status, result);
-
-            return result;
+            return json_object_to_py(result);
     }, "Snaps a coordinate to the street network and returns the nearest matches.\n\n"
             "Examples:\n\
                 >>> res = py_osrm.Nearest(nearest_params)\n\n"
@@ -151,8 +149,7 @@ NB_MODULE(osrm_ext, m) {
             json::Object result;
             osrm::engine::Status status = t->Route(params, result);
             osrm_nb_util::check_status(status, result);
-
-            return result;
+            return json_object_to_py(result);
     }, "Finds the fastest route between coordinates in the supplied order.\n\n"
             "Examples:\n\
                 >>> res = py_osrm.Route(route_params)\n\n"
@@ -171,8 +168,7 @@ NB_MODULE(osrm_ext, m) {
             json::Object result;
             osrm::engine::Status status = t->Table(params, result);
             osrm_nb_util::check_status(status, result);
-
-            return result;
+            return json_object_to_py(result);
     }, "Computes the duration of the fastest route between all pairs of supplied coordinates.\n\n"
             "Examples:\n\
                 >>> res = py_osrm.Table(table_params)\n\n"
@@ -211,8 +207,7 @@ NB_MODULE(osrm_ext, m) {
             json::Object result;
             osrm::engine::Status status = t->Trip(params, result);
             osrm_nb_util::check_status(status, result);
-
-            return result;
+            return json_object_to_py(result);
     }, "Solves the Traveling Salesman Problem using a greedy heuristic (farthest-insertion algorithm).\n\n"
             "Examples:\n\
                 >>> res = py_osrm.Trip(trip_params)\n\n"

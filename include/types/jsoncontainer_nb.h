@@ -6,12 +6,14 @@
 // Removed dependency on mapbox/variant and recursive_wrapper.
 
 #include <nanobind/nanobind.h>
+#include <variant>
 
 #include <string>
 
 void init_JSONContainer(nanobind::module_& m);
 
 namespace json = osrm::util::json;
+namespace nb = nanobind; // alias used in visitors below
 using JSONValue = json::Value; // alias retained for backwards compatibility
 // Rely on nanobind's native std::variant + basic types caster support.
 
@@ -44,5 +46,23 @@ struct ValueStringifyVisitor {
         return output + "}";
     }
 };
+
+// Visitor converting OSRM json::Value (std::variant) into native Python objects.
+struct ToPythonVisitor {
+    nb::object operator()(const json::String &s) const { return nb::str(s.value.c_str(), s.value.size()); }
+    nb::object operator()(const json::Number &n) const { return nb::float_(n.value); }
+    nb::object operator()(const json::True &) const { return nb::bool_(true); }
+    nb::object operator()(const json::False &) const { return nb::bool_(false); }
+    nb::object operator()(const json::Null &) const { return nb::none(); }
+    nb::object operator()(const json::Array &arr) const {
+        nb::list lst; for (auto const &v : arr.values) lst.append(std::visit(*this, v)); return lst; }
+    nb::object operator()(const json::Object &obj) const {
+        nb::dict d; for (auto const &kv : obj.values) d[ nb::str(kv.first.data(), kv.first.size()) ] = std::visit(*this, kv.second); return d; }
+};
+
+inline nb::object json_value_to_py(const json::Value &v) { return std::visit(ToPythonVisitor{}, v); }
+inline nb::dict json_object_to_py(const json::Object &o) {
+    ToPythonVisitor vis; return nb::cast<nb::dict>(vis(o)); }
+
 
 #endif //OSRM_NB_JSONCONTAINER_H
